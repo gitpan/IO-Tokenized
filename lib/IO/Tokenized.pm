@@ -11,7 +11,7 @@ use Carp;
 use Symbol;
 use Exporter;
 
-$VERSION = '0.03';
+$VERSION = '0.04';
 
 @ISA = qw(Exporter);
 @EXPORT = ();
@@ -20,7 +20,7 @@ $VERSION = '0.03';
 
 %EXPORT_TAGS = (all => [@EXPORT_OK],
 		parse => [qw(initialize_parsing gettoken gettokens)],
-		buffer => [qw(bufferspace flushbuffer)]
+		buffer => [qw(bufferspace flushbuffer resynch)]
 	       );
 
 sub new {
@@ -127,7 +127,7 @@ sub gettoken {
     croak "Overflowed buffer with no token found";    
   }
   else {
-    return [$token => $value];
+    return ($token => $value);
   }
 }
 
@@ -195,11 +195,11 @@ sub setparser {
 	  return ($token,$value) if defined $token;
 	}
 	# no token matched... we try to extend the buffer by reading
-       # another line but first we check that there is no overflow
-	return ['<overflow>' => undef] unless 
+	# another line but first we check that there is no overflow
+	return ('<overflow>' => undef) unless 
 	  length($$buffer) < buffer_space($self);
 	my $line = scalar <$self>;
-	return ['<unparsable>' => undef] unless defined $line;
+	return ('<unparsable>' => undef) unless defined $line;
 	$$buffer .= $line;
       }
     };
@@ -234,12 +234,26 @@ IO::Tokenized - Extension of Perl for tokenized input
 
 =head1 SYNOPSIS
 
+  #Functional interface
+
   use IO::Tokenized qw/:parse/;
   
+  open FOO,"<","some/input/file" or die "Can't open 'some/input/file': $!";
+  setparser(\*FOO,[num => qr/\d+/],
+                  [ident => qr/[a-z_][a-z0-9_]],
+                  [op => qr![+*/-]!,\&opname]);
+  
+  while (my ($tok,$val) = gettoken(\*FOO)) {
+    ... do something smart...
+  }
+
+  close(FOO);
+
+
 
 =head1 ABSTRACT
 
-Defines an extension to perl filehandles allowing to split the input
+Defines an extension to perl filehandles allowing spliting the input
 stream according to regular expressions.
 
 
@@ -303,7 +317,7 @@ kicked in and I wrote this module and its compagnon I<IO::Tokenized::File>.
 
 =head1 FUNCTIONS
 
-The following functions are defined by the C<IO::tokenized> module.
+The following functions are defined by the I<IO::tokenized> module.
 
 =over
 
@@ -320,10 +334,16 @@ C<token_separator>
 
 =item * C<gettoken($handle)>
 
-Returns the next token in the input stream identified by C<$handle>. On end of 
-file, C<gettoken($handle)> returns C<undef>. If the end of file is hitten, or 
-the internal buffer overflows, without a token beeing found, the functions 
-croaks.
+Returns the next token in the input stream identified by
+C<$handle>. Each token is returned as a pair C<(token_name => $value)>
+where C<$value> is either the initial portion of the input stream
+amtching the token regular expression (if no action was defined for
+token C<token_name>) or the result of the action function evaluation
+if such a function was defined for token C<token_name>.
+
+On end of file, C<gettoken($handle)> returns C<undef>. If the
+end of file is hitten, or the internal buffer overflows, without a
+token beeing found, the functions croaks.
 
 =item * C<gettokens($handle>>
 
@@ -332,8 +352,10 @@ the end of file.
 
 =item * C<buffer_space($handle [,Number])>
 
-Retrives or sets the size of the internal buffer used by I<IO::Tokenized>. 
-By default the buffer size is of 30720 characters (30 Kb).
+Retrives or sets the size of the internal buffer used by
+I<IO::Tokenized>.  By default the buffer size is of 30720 characters
+(30 Kb). If used for setting, by providing a new value, it returns the
+old value.
 
 =item * C<token_separator($handle[,regex]>
 
@@ -360,11 +382,19 @@ input stream.
 
 =item C<getline($handle)> and C<getlines($handle)>
 
-These functions work as the function of the same name in C<IO::Handle>, they are
+These functions work as the function of the same name in I<IO::Handle>, they are
 redefined to take into account the presence of an internal buffer.
 
 
 =back
+
+=head1 EXPORTS
+
+I<IO::Tokenized> does not export any function by default but all the above 
+mentioned functions are exportable. There are, beside the classical I<:all>,
+two more export tags: I<:parse>, which exports C<initialize_parsing>,
+C<gettoken> and C<gettokens>, and I<:buffer>, which exports C<bufferspace>,
+C<flushbuffer> and C<resynch>.
 
 
 =head1 OBJECT ORIENTED
@@ -383,7 +413,7 @@ L<IO::Tokenized::File>.
 Tokens are specified, either to the C<new> creator or to the C<settparser>
 mutator, by a list of I<token definitions>. Each token definition is 
 (a reference to) an array with two or three elements. The first element 
-represent the token name, the second one is the regexp defining the token
+represents the token name, the second one is the regexp defining the token
 itself while the third, if present, is the I<action> function.
 
 
@@ -409,8 +439,8 @@ skip regular expression as set by the C<token_separator> function. In doing so,
 it can read more lines from the file into the buffer.
 
 =item 2.
-it considers the token definitions I<in the order they where passed to> 
-C<settparser>. If token C<token> is defined by regexp C<$re> check that
+consider the token definitions I<in the order they where passed to> 
+C<settparser>. If token C<token> is defined by regexp C<$re>, check that
 the buffer matches C</^($re)/>. If it is not so, then pass to the following
 token if any, to step 4. below if none.
 
@@ -437,14 +467,15 @@ characters that was fixed by C<buffer_space> then C<gettoken> croacks.
 
 =item *
 The selected token is the first matching token, not the longest one. I'm 
-wondering what would be best: 1) let this alone, 2) change it to 'the longest match'
+wondering what would be best: 1) let this alone, 2) change it to 'the longest match',
 3) add an option, 4) write another module, 5) some other thing.
 
 =item *
 No token can span more than one line unless it has a well defined end marker. 
 This does not appear to be a real problem. The only tokens spanning more than one
-line I ever seen where multiline strings and block comments, both of which have
-end markers.
+line I ever seen are multiline strings and block comments, both of which have
+end markers: closed quote and I<end of comment> respectively.
+
 
 
 
@@ -457,14 +488,14 @@ until the version number gets to 1.00. This means that there surely are plenty
 of bugs which aren't be discovered yet, more so because testing is all but
 complete.
 
-Bugs reports are wellcome and are to be addressed directly to the author at
+Bugs reports are welcome and are to be addressed directly to the author at
 the address below.
 
 
 =head1 TODO
 
 There is still lot of work to do on this module, both at the programming level
-and at the conceptual level. Feature requests as well as insights ar wellcome.
+and at the conceptual level. Feature requests as well as insights are welcome.
 
 =head1 AUTHOR
 

@@ -5,7 +5,7 @@ use vars qw($VERSION);
 
 use Carp;
 
-$VERSION = '0.04';
+$VERSION = '0.05';
 
 
 # new has the following synopsis:
@@ -14,11 +14,9 @@ $VERSION = '0.04';
 sub new {
   my $class = shift;
   my ($filename,@tokens) = @_;
-  my $self = IO::Tokenized->new();
+  my $self = defined $filename ? IO::File->new($filename): IO::File->new();
+  $self = IO::Tokenized->new($self,@tokens);
   bless $self,$class;
-  $self->setparser(@tokens) if @tokens;
-  $self->open($filename,"r") if defined $filename;
-  return $self;
 }
 
 # redefine so that only opening for input is allowed
@@ -34,7 +32,7 @@ __END__
 
 =head1 NAME
 
-IO::Tokenized::File - 
+IO::Tokenized::File - Extension of IO::File allowing tokenized input
 
 =head1 SYNOPSIS
 
@@ -54,10 +52,34 @@ IO::Tokenized::File -
 
 =head1 DESCRIPTION
 
-C<IO::Tokenized::File> adds the methods provided by C<IO::Tokenized> to 
-C<IO::File> objects. See L<IO::Tokenized> for details about how the tokens are 
+I<IO::Tokenized::File> adds the methods provided by I<IO::Tokenized> to 
+I<IO::File> objects. See L<IO::Tokenized> for details about how the tokens are 
 specified and returned.
 
+
+=head1 METHODS
+
+I<IO::Tokenized::File> inherits both from I<IO::tokenized> and
+I<IO::File>, so that methods from both classes are available to
+I<IO::Tokenized::File> objects.
+
+I<IO::Tokenized::File> redefines the following methods:
+
+=over
+
+=item * C<new([$filename[,@tokens]])>
+
+The C<new> method is redefined so as to call both
+C<IO::File::new> (passing to C<$filename> if it is defined) and
+C<IO::Tokenized::new> (passing to it the C<@tokens> parameter).
+
+=item * C<open($filename)>
+
+The C<open> method from I<IO::File> is redefined so that only opening
+for input is allowed: requestes for other kind of opening are silently
+converted to oepning for input (this is a bug).
+
+=back
 
 =head1 SEE ALSO
 

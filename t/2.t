@@ -14,7 +14,7 @@ BEGIN {
 };
 use Test::More;
 use IO::Tokenized::File;
-plan tests=> 1 + 2 * @expected + 1;
+plan tests=> 1 + 2 * @expected + 2;
 
 
 my %opnames = qw(* times + plus - minus / divide);
@@ -31,9 +31,11 @@ ok($FH = IO::Tokenized::File->new('t/t2.txt',
    'creation');
 
 foreach my $r (@expected) {
-  my $t = $FH->gettoken();
-  is ($t->[0],$r->[0],'token equality');
-  my $op = $r->[0] eq 'num' ? '==' : 'eq';
-  cmp_ok($t->[1],$op,$r->[1],'value equalty');
+  my ($exp_tok,$exp_val) = @$r;
+  my ($tok,$val) = $FH->gettoken();
+  is ($tok,$exp_tok,'token equality');
+  my $op = $exp_tok eq 'num' ? '==' : 'eq';
+  cmp_ok($val,$op,$exp_val,'value equalty');
 }
+ok(! defined $FH->gettoken(),"no more token");
 ok($FH->eof(),'eof');
